@@ -3,6 +3,7 @@ from sklearn.preprocessing import (StandardScaler, MinMaxScaler, MaxAbsScaler, R
 from bridgescaler.group import GroupStandardScaler, GroupRobustScaler, GroupMinMaxScaler
 from bridgescaler.deep import DeepStandardScaler, DeepMinMaxScaler, DeepQuantileTransformer
 from bridgescaler.distributed import DStandardScaler, DMinMaxScaler, DQuantileScaler
+from bridgescaler.distributed_tensor import DStandardScalerTensor, DMinMaxScalerTensor
 import numpy as np
 import json
 import pandas as pd
@@ -27,6 +28,8 @@ scaler_objs = {"StandardScaler": StandardScaler,
                "DStandardScaler": DStandardScaler,
                "DMinMaxScaler": DMinMaxScaler,
                "DQuantileScaler": DQuantileScaler,
+               "DStandardScalerTensor": DStandardScalerTensor,
+               "DMinMaxScalerTensor": DMinMaxScalerTensor,
                }
 
 
