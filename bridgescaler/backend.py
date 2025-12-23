@@ -90,12 +90,16 @@ def read_scaler(scaler_str):
     """
     scaler_params = json.loads(scaler_str, object_hook=object_hook)
     scaler = scaler_objs[scaler_params["type"]]()
+    tensor_flag =  "Tensor" in scaler_params["type"]
     del scaler_params["type"]
     for k, v in scaler_params.items():
         if isinstance(v, dict) and v["object"] == "ndarray":
             setattr(scaler, k, np.array(v['data'], dtype=v['dtype']).reshape(v['shape']))
         else:
-            setattr(scaler, k, v)
+            if tensor_flag:
+                setattr(scaler, k, torch.tensor(v))
+            else:
+                setattr(scaler, k, v)
     return scaler
 
 
