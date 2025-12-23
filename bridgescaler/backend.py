@@ -10,6 +10,7 @@ import pandas as pd
 from numpy.lib.format import descr_to_dtype, dtype_to_descr
 from base64 import b64decode, b64encode
 from typing import Any
+import torch
 
 
 scaler_objs = {"StandardScaler": StandardScaler,
@@ -60,6 +61,12 @@ def print_scaler(scaler):
     """
     scaler_params = scaler.__dict__
     scaler_params["type"] = str(type(scaler))[1:-2].split(".")[-1]
+
+    if "Tensor" in scaler_params["type"]:
+        for keys in scaler_params:
+            if type(scaler_params[keys]) == torch.Tensor:
+                scaler_params[keys] = scaler_params[keys].cpu().numpy().copy()
+
     return json.dumps(scaler_params, indent=4, sort_keys=True, cls=NumpyEncoder)
 
 
