@@ -1,24 +1,6 @@
 from copy import deepcopy
-import importlib.util
 
-from packaging import version
 import torch
-
-REQUIRED_VERSION = "2.0.0"  # required torch version
-
-# Check if PyTorch is installed
-if importlib.util.find_spec("torch") is None:
-    raise ImportError("PyTorch is not installed")
-
-installed_version = torch.__version__
-
-# Validate version
-if version.parse(installed_version) < version.parse(REQUIRED_VERSION):
-    raise RuntimeError(
-        f"PyTorch version mismatch: required {REQUIRED_VERSION}, "
-        f"found {installed_version}"
-    )
-
 
 class DBaseScalerTensor:
     """
