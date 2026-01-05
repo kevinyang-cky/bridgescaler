@@ -1,6 +1,9 @@
+from . import require_torch
+require_torch()   # enforce torch availability/version at import time
+import torch
+
 from copy import deepcopy
 
-import torch
 
 class DBaseScalerTensor:
     """
