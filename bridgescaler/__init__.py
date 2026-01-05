@@ -4,7 +4,7 @@ from packaging.version import Version
 
 
 # 1. PyTorch Checks
-REQUIRED_TORCH_VERSION = Version("2.0.0")
+REQUIRED_TORCH_VERSION = Version("2.6.0")
 
 def get_torch_status() -> tuple[bool, Version | None]:
     try:
@@ -30,11 +30,14 @@ from .distributed import (DStandardScaler, DMinMaxScaler, DQuantileScaler)
 
 # 3. Conditional Torch Imports
 if TORCH_AVAILABLE:
-    from .distributed_tensor import (
-        DStandardScalerTensor,
-        DMinMaxScalerTensor,
-    )
-    from .backend_tensor import print_scaler_tensor, read_scaler_tensor
+    try: # Ensure that no errors are raised if PyTorch is installed but does not meet the required version.
+        from .distributed_tensor import (
+            DStandardScalerTensor,
+            DMinMaxScalerTensor,
+        )
+        from .backend_tensor import print_scaler_tensor, read_scaler_tensor
+    except:
+        pass
 
 # 4. Define Public API
 __all__ = [
@@ -46,6 +49,3 @@ __all__ = [
     "DeepStandardScaler", "DeepMinMaxScaler", "DeepQuantileTransformer",
     "DStandardScaler", "DMinMaxScaler", "DQuantileScaler",
 ]
-
-if TORCH_AVAILABLE:
-    __all__ += ["DStandardScalerTensor", "DMinMaxScalerTensor"]
