@@ -3,14 +3,12 @@ from sklearn.preprocessing import (StandardScaler, MinMaxScaler, MaxAbsScaler, R
 from bridgescaler.group import GroupStandardScaler, GroupRobustScaler, GroupMinMaxScaler
 from bridgescaler.deep import DeepStandardScaler, DeepMinMaxScaler, DeepQuantileTransformer
 from bridgescaler.distributed import DStandardScaler, DMinMaxScaler, DQuantileScaler
-from bridgescaler.distributed_tensor import DStandardScalerTensor, DMinMaxScalerTensor
 import numpy as np
 import json
 import pandas as pd
 from numpy.lib.format import descr_to_dtype, dtype_to_descr
 from base64 import b64decode, b64encode
 from typing import Any
-import torch
 
 
 scaler_objs = {"StandardScaler": StandardScaler,
@@ -29,8 +27,6 @@ scaler_objs = {"StandardScaler": StandardScaler,
                "DStandardScaler": DStandardScaler,
                "DMinMaxScaler": DMinMaxScaler,
                "DQuantileScaler": DQuantileScaler,
-               "DStandardScalerTensor": DStandardScalerTensor,
-               "DMinMaxScalerTensor": DMinMaxScalerTensor,
                }
 
 
@@ -61,12 +57,6 @@ def print_scaler(scaler):
     """
     scaler_params = scaler.__dict__
     scaler_params["type"] = str(type(scaler))[1:-2].split(".")[-1]
-
-    if "Tensor" in scaler_params["type"]:
-        for keys in scaler_params:
-            if type(scaler_params[keys]) == torch.Tensor:
-                scaler_params[keys] = scaler_params[keys].cpu().numpy().copy()
-
     return json.dumps(scaler_params, indent=4, sort_keys=True, cls=NumpyEncoder)
 
 
@@ -90,16 +80,12 @@ def read_scaler(scaler_str):
     """
     scaler_params = json.loads(scaler_str, object_hook=object_hook)
     scaler = scaler_objs[scaler_params["type"]]()
-    tensor_flag =  "Tensor" in scaler_params["type"]
     del scaler_params["type"]
     for k, v in scaler_params.items():
         if isinstance(v, dict) and v["object"] == "ndarray":
             setattr(scaler, k, np.array(v['data'], dtype=v['dtype']).reshape(v['shape']))
         else:
-            if tensor_flag:
-                setattr(scaler, k, torch.tensor(v))
-            else:
-                setattr(scaler, k, v)
+            setattr(scaler, k, v)
     return scaler
 
 
