@@ -4,7 +4,7 @@ from packaging.version import Version
 
 
 # 1. PyTorch Checks
-REQUIRED_TORCH_VERSION = Version("2.6.0")
+REQUIRED_TORCH_VERSION = Version("2.0.0")
 
 def get_torch_status() -> tuple[bool, Version | None]:
     try:
