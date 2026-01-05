@@ -1,25 +1,26 @@
 from importlib.metadata import version, PackageNotFoundError
 
-from packaging.version import parse
+from packaging.version import Version
 
-# 1. Internal Constants & PyTorch Checks
-REQUIRED_TORCH_VERSION = "2.0.0"
 
-def _get_torch_status():
-    """Checks torch version via metadata without importing the module."""
+# 1. PyTorch Checks
+REQUIRED_TORCH_VERSION = Version("2.0.0")
+
+def get_torch_status() -> tuple[bool, Version | None]:
     try:
-        installed_version = version("torch")
-
-        if parse(installed_version) < parse(REQUIRED_TORCH_VERSION):
-            raise RuntimeError(
-                f"PyTorch >= {REQUIRED_TORCH_VERSION} required; found {installed_version}"
-            )
-
-        return True, installed_version
+        return True, Version(version("torch"))
     except PackageNotFoundError:
         return False, None
 
-TORCH_AVAILABLE, TORCH_VERSION = _get_torch_status()
+TORCH_AVAILABLE, TORCH_VERSION = get_torch_status()
+
+def require_torch() -> None:
+    if not TORCH_AVAILABLE:
+        raise ImportError("PyTorch is required but not installed")
+    if TORCH_VERSION < REQUIRED_TORCH_VERSION:
+        raise RuntimeError(
+            f"PyTorch >= {REQUIRED_TORCH_VERSION} required; found {TORCH_VERSION}"
+        )
 
 # 2. Base Imports
 from .backend import save_scaler, load_scaler, print_scaler, read_scaler
@@ -33,6 +34,7 @@ if TORCH_AVAILABLE:
         DStandardScalerTensor,
         DMinMaxScalerTensor,
     )
+    from .backend_tensor import print_scaler_tensor, read_scaler_tensor
 
 # 4. Define Public API
 __all__ = [
