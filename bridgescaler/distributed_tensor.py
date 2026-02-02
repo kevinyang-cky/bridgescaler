@@ -36,7 +36,7 @@ class DBaseScalerTensor:
         if not channels_last:
             var_dim_num = 1
         assert isinstance(x, torch.Tensor), "Input must be a PyTorch tensor"
-        x_columns = torch.arange(x.shape[var_dim_num])
+        x_columns = torch.arange(x.shape[var_dim_num], device=x.device)
         return x_columns
 
     def set_channel_dim(self, channels_last=None):
@@ -56,9 +56,9 @@ class DBaseScalerTensor:
         assert (
             x.shape[channel_dim] == self.x_columns_.shape[0]
         ), "Number of input columns does not match scaler."
-        x_col_order = torch.arange(x.shape[channel_dim])
+        x_col_order = torch.arange(x.shape[channel_dim], device=x.device)
         xv = x
-        x_transformed = torch.zeros(xv.shape, dtype=xv.dtype)
+        x_transformed = torch.zeros(xv.shape, dtype=xv.dtype, device=xv.device)
         return xv, x_transformed, channels_last, channel_dim, x_col_order
 
     def fit(self, x, weight=None):
@@ -105,14 +105,14 @@ class DStandardScalerTensor(DBaseScalerTensor):
             self.x_columns_ = x_columns
             if len(xv.shape) > 2:
                 if self.channels_last:
-                    self.n_ += torch.prod(torch.tensor(xv.shape[:-1]))
+                    self.n_ += torch.prod(torch.tensor(xv.shape[:-1], dtype=xv.dtype, device=xv.device))
                 else:
                     self.n_ += xv.shape[0] * \
-                        torch.prod(torch.tensor(xv.shape[2:]))
+                        torch.prod(torch.tensor(xv.shape[2:], dtype=xv.dtype, device=xv.device))
             else:
                 self.n_ += xv.shape[0]
-            self.mean_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype)
-            self.var_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype)
+            self.mean_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
+            self.var_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
 
             if self.channels_last:
                 for i in range(xv.shape[channel_dim]):
@@ -129,15 +129,15 @@ class DStandardScalerTensor(DBaseScalerTensor):
                 x.shape[channel_dim] == self.x_columns_.shape[0]
             ), "New data has a different number of columns"
             if self.channels_last:
-                x_col_order = torch.arange(x.shape[-1])
+                x_col_order = torch.arange(x.shape[-1], device=x.device)
             else:
-                x_col_order = torch.arange(x.shape[1])
+                x_col_order = torch.arange(x.shape[1], device=x.device)
             if len(xv.shape) > 2:
                 if self.channels_last:
-                    new_n = torch.prod(torch.tensor(xv.shape[:-1]))
+                    new_n = torch.prod(torch.tensor(xv.shape[:-1], dtype=xv.dtype, device=xv.device))
                 else:
                     new_n = xv.shape[0] * \
-                        torch.prod(torch.tensor(xv.shape[2:]))
+                        torch.prod(torch.tensor(xv.shape[2:], dtype=xv.dtype, device=xv.device))
             else:
                 new_n = xv.shape[0]
             for i, o in enumerate(x_col_order):
@@ -185,11 +185,11 @@ class DStandardScalerTensor(DBaseScalerTensor):
         if channels_last:
             for i, o in enumerate(x_col_order):
                 x_transformed[..., i] = (
-                    xv[..., i] - x_mean[o]) / torch.sqrt(x_var[o])
+                    xv[..., i] - x_mean[o].to(device=xv[..., i].device)) / torch.sqrt(x_var[o].to(device=xv[..., i].device))
         else:
             for i, o in enumerate(x_col_order):
                 x_transformed[:, i] = (
-                    xv[:, i] - x_mean[o]) / torch.sqrt(x_var[o])
+                    xv[:, i] - x_mean[o].to(device=xv[:, i].device)) / torch.sqrt(x_var[o].to(device=xv[:, i].device))
         return x_transformed
 
     def inverse_transform(self, x, channels_last=None):
@@ -204,11 +204,11 @@ class DStandardScalerTensor(DBaseScalerTensor):
         if channels_last:
             for i, o in enumerate(x_col_order):
                 x_transformed[..., i] = xv[..., i] * \
-                    torch.sqrt(x_var[o]) + x_mean[o]
+                    torch.sqrt(x_var[o].to(device=xv[..., i].device)) + x_mean[o].to(device=xv[..., i].device)
         else:
             for i, o in enumerate(x_col_order):
                 x_transformed[:, i] = xv[:, i] * \
-                    torch.sqrt(x_var[o]) + x_mean[o]
+                    torch.sqrt(x_var[o].to(device=xv[:, i].device)) + x_mean[o].to(device=xv[:, i].device)
         return x_transformed
 
     def get_scales(self):
@@ -255,8 +255,8 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
         channel_dim = self.set_channel_dim()
         if not self._fit:
             self.x_columns_ = x_columns
-            self.max_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype)
-            self.min_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype)
+            self.max_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
+            self.min_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
 
             if self.channels_last:
                 for i in range(xv.shape[channel_dim]):
@@ -272,9 +272,9 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
                 x.shape[channel_dim] == self.x_columns_.shape[0]
             ), "New data has a different number of columns"
             if self.channels_last:
-                x_col_order = torch.arange(x.shape[-1])
+                x_col_order = torch.arange(x.shape[-1], device=x.device)
             else:
-                x_col_order = torch.arange(x.shape[1])
+                x_col_order = torch.arange(x.shape[1], device=x.device)
             if self.channels_last:
                 for i, o in enumerate(x_col_order):
                     self.max_x_[o] = torch.maximum(
@@ -299,15 +299,16 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
             channel_dim,
             x_col_order,
         ) = self.process_x_for_transform(x, channels_last)
+        x_min, x_max = self.get_scales()
         if channels_last:
             for i, o in enumerate(x_col_order):
-                x_transformed[..., i] = (xv[..., i] - self.min_x_[o]) / (
-                    self.max_x_[o] - self.min_x_[o]
+                x_transformed[..., i] = (xv[..., i] - x_min[o].to(device=xv[..., i].device)) / (
+                    x_max[o].to(device=xv[..., i].device) - x_min[o].to(device=xv[..., i].device)
                 )
         else:
             for i, o in enumerate(x_col_order):
-                x_transformed[:, i] = (xv[:, i] - self.min_x_[o]) / (
-                    self.max_x_[o] - self.min_x_[o]
+                x_transformed[:, i] = (xv[:, i] - x_min[o].to(device=xv[:, i].device)) / (
+                    x_max[o].to(device=xv[:, i].device) - x_min[o].to(device=xv[:, i].device)
                 )
         return x_transformed
 
@@ -319,17 +320,18 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
             channel_dim,
             x_col_order,
         ) = self.process_x_for_transform(x, channels_last)
+        x_min, x_max = self.get_scales()
         if channels_last:
             for i, o in enumerate(x_col_order):
                 x_transformed[..., i] = (
-                    xv[..., i] * (self.max_x_[o] - self.min_x_[o]
-                                  ) + self.min_x_[o]
+                    xv[..., i] * (x_max[o].to(device=xv[..., i].device) - x_min[o].to(device=xv[..., i].device)
+                                  ) + x_min[o].to(device=xv[..., i].device)
                 )
         else:
             for i, o in enumerate(x_col_order):
                 x_transformed[:, i] = (
-                    xv[:, i] * (self.max_x_[o] - self.min_x_[o]) +
-                    self.min_x_[o]
+                    xv[:, i] * (x_max[o].to(device=xv[:, i].device) - x_min[o].to(device=xv[:, i].device)) +
+                    x_min[o].to(device=xv[:, i].device)
                 )
         return x_transformed
 
