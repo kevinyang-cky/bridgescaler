@@ -83,6 +83,16 @@ class DBaseScalerTensor:
     def add_variables(self, other):
         pass
 
+    @staticmethod
+    def reshape_to_channels_first(stat, target):
+        """Reshapes 'stat' to align with the channel dimension (index 1)."""
+        return stat.view(*(stat.size(0) if i == 1 else 1 for i in range(target.dim())))
+
+    @staticmethod
+    def reshape_to_channels_last(stat, target):
+        """Reshapes 'stat' to align with the last dimension."""
+        return stat.view(*(stat.size(0) if i == target.dim() - 1 else 1 for i in range(target.dim())))
+
 
 class DStandardScalerTensor(DBaseScalerTensor):
     """
@@ -115,13 +125,11 @@ class DStandardScalerTensor(DBaseScalerTensor):
             self.var_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
 
             if self.channels_last:
-                for i in range(xv.shape[channel_dim]):
-                    self.mean_x_[i] = torch.mean(xv[..., i])
-                    self.var_x_[i] = torch.var(xv[..., i], correction=0)
+                self.mean_x_ = torch.mean(xv, dim=tuple(range(xv.ndim - 1)))
+                self.var_x_ = torch.var(xv, dim=tuple(range(xv.ndim - 1)), correction=0)
             else:
-                for i in range(xv.shape[channel_dim]):
-                    self.mean_x_[i] = torch.mean(xv[:, i])
-                    self.var_x_[i] = torch.var(xv[:, i], correction=0)
+                self.mean_x_ = torch.mean(xv, dim=tuple(d for d in range(xv.ndim) if d != 1))
+                self.var_x_ = torch.var(xv, dim=tuple(d for d in range(xv.ndim) if d != 1), correction=0)
 
         else:
             # Update existing scaler with new data
@@ -140,24 +148,23 @@ class DStandardScalerTensor(DBaseScalerTensor):
                         torch.prod(torch.tensor(xv.shape[2:], dtype=xv.dtype, device=xv.device))
             else:
                 new_n = xv.shape[0]
-            for i, o in enumerate(x_col_order):
-                if self.channels_last:
-                    new_mean = torch.mean(xv[..., i])
-                    new_var = torch.var(xv[..., i], correction=0)
-                else:
-                    new_mean = torch.mean(xv[:, i])
-                    new_var = torch.var(xv[:, i], correction=0)
-                combined_mean = (self.n_ * self.mean_x_[o] + new_n * new_mean) / (
-                    self.n_ + new_n
-                )
-                weighted_var = (self.n_ * self.var_x_[o] + new_n * new_var) / (
-                    self.n_ + new_n
-                )
-                var_correction = (
-                    self.n_ * new_n * (self.mean_x_[o] - new_mean) ** 2
-                ) / ((self.n_ + new_n) ** 2)
-                self.mean_x_[o] = combined_mean
-                self.var_x_[o] = weighted_var + var_correction
+            if self.channels_last:
+                new_mean = torch.mean(xv, dim=tuple(range(xv.ndim - 1)))
+                new_var = torch.var(xv, dim=tuple(range(xv.ndim - 1)), correction=0)
+            else:
+                new_mean = torch.mean(xv, dim=tuple(d for d in range(xv.ndim) if d != 1))
+                new_var = torch.var(xv, dim=tuple(d for d in range(xv.ndim) if d != 1), correction=0)
+            combined_mean = (self.n_ * self.mean_x_ + new_n * new_mean) / (
+                self.n_ + new_n
+            )
+            weighted_var = (self.n_ * self.var_x_ + new_n * new_var) / (
+                self.n_ + new_n
+            )
+            var_correction = (
+                self.n_ * new_n * (self.mean_x_ - new_mean) ** 2
+            ) / ((self.n_ + new_n) ** 2)
+            self.mean_x_ = combined_mean
+            self.var_x_ = weighted_var + var_correction
             self.n_ += new_n
         self._fit = True
 
@@ -183,13 +190,11 @@ class DStandardScalerTensor(DBaseScalerTensor):
         ) = self.process_x_for_transform(x, channels_last)
         x_mean, x_var = self.get_scales()
         if channels_last:
-            for i, o in enumerate(x_col_order):
-                x_transformed[..., i] = (
-                    xv[..., i] - x_mean[o].to(device=xv[..., i].device)) / torch.sqrt(x_var[o].to(device=xv[..., i].device))
+            x_transformed = (
+                    xv - self.reshape_to_channels_last(x_mean.to(device=xv.device), xv)) / torch.sqrt(self.reshape_to_channels_last(x_var.to(device=xv.device), xv))
         else:
-            for i, o in enumerate(x_col_order):
-                x_transformed[:, i] = (
-                    xv[:, i] - x_mean[o].to(device=xv[:, i].device)) / torch.sqrt(x_var[o].to(device=xv[:, i].device))
+            x_transformed = (
+                    xv - self.reshape_to_channels_first(x_mean.to(device=xv.device), xv)) / torch.sqrt(self.reshape_to_channels_first(x_var.to(device=xv.device), xv))
         return x_transformed
 
     def inverse_transform(self, x, channels_last=None):
@@ -202,13 +207,11 @@ class DStandardScalerTensor(DBaseScalerTensor):
         ) = self.process_x_for_transform(x, channels_last)
         x_mean, x_var = self.get_scales()
         if channels_last:
-            for i, o in enumerate(x_col_order):
-                x_transformed[..., i] = xv[..., i] * \
-                    torch.sqrt(x_var[o].to(device=xv[..., i].device)) + x_mean[o].to(device=xv[..., i].device)
+            x_transformed = xv * \
+                    torch.sqrt(self.reshape_to_channels_last(x_var.to(device=xv.device), xv)) + self.reshape_to_channels_last(x_mean.to(device=xv.device), xv)
         else:
-            for i, o in enumerate(x_col_order):
-                x_transformed[:, i] = xv[:, i] * \
-                    torch.sqrt(x_var[o].to(device=xv[:, i].device)) + x_mean[o].to(device=xv[:, i].device)
+            x_transformed = xv * \
+                    torch.sqrt(self.reshape_to_channels_first(x_var.to(device=xv.device), xv)) + self.reshape_to_channels_first(x_mean.to(device=xv.device), xv)
         return x_transformed
 
     def get_scales(self):
@@ -259,13 +262,11 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
             self.min_x_ = torch.zeros(xv.shape[channel_dim], dtype=xv.dtype, device=xv.device)
 
             if self.channels_last:
-                for i in range(xv.shape[channel_dim]):
-                    self.max_x_[i] = torch.max(xv[..., i])
-                    self.min_x_[i] = torch.min(xv[..., i])
+                self.max_x_ = torch.amax(xv, dim=tuple(range(xv.ndim - 1)))
+                self.min_x_ = torch.amin(xv, dim=tuple(range(xv.ndim - 1)))
             else:
-                for i in range(xv.shape[channel_dim]):
-                    self.max_x_[i] = torch.max(xv[:, i])
-                    self.min_x_[i] = torch.min(xv[:, i])
+                self.max_x_ = torch.amax(xv, dim=tuple(d for d in range(xv.ndim) if d != 1))
+                self.min_x_ = torch.amin(xv, dim=tuple(d for d in range(xv.ndim) if d != 1))
         else:
             # Update existing scaler with new data
             assert (
@@ -276,19 +277,17 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
             else:
                 x_col_order = torch.arange(x.shape[1], device=x.device)
             if self.channels_last:
-                for i, o in enumerate(x_col_order):
-                    self.max_x_[o] = torch.maximum(
-                        self.max_x_[o], torch.max(xv[..., i])
-                    )
-                    self.min_x_[o] = torch.minimum(
-                        self.min_x_[o], torch.min(xv[..., i])
-                    )
+                self.max_x_ = torch.maximum(
+                    self.max_x_, torch.amax(xv, dim=tuple(range(xv.ndim - 1)))
+                )
+                self.min_x_ = torch.minimum(
+                    self.min_x_, torch.amin(xv, dim=tuple(range(xv.ndim - 1)))
+                )
             else:
-                for i, o in enumerate(xv.shape[channel_dim]):
-                    self.max_x_[o] = torch.maximum(
-                        self.max_x_[o], torch.max(xv[:, i]))
-                    self.min_x_[o] = torch.minimum(
-                        self.min_x_[o], torch.min(xv[:, i]))
+                self.max_x_ = torch.maximum(
+                    self.max_x_, torch.amax(xv, dim=tuple(d for d in range(xv.ndim) if d != 1)))
+                self.min_x_ = torch.minimum(
+                    self.min_x_, torch.amin(xv, dim=tuple(d for d in range(xv.ndim) if d != 1)))
         self._fit = True
 
     def transform(self, x, channels_last=None):
@@ -301,15 +300,13 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
         ) = self.process_x_for_transform(x, channels_last)
         x_min, x_max = self.get_scales()
         if channels_last:
-            for i, o in enumerate(x_col_order):
-                x_transformed[..., i] = (xv[..., i] - x_min[o].to(device=xv[..., i].device)) / (
-                    x_max[o].to(device=xv[..., i].device) - x_min[o].to(device=xv[..., i].device)
-                )
+            x_transformed = (xv - self.reshape_to_channels_last(x_min.to(device=xv.device), xv)) / (
+                self.reshape_to_channels_last(x_max.to(device=xv.device), xv) - self.reshape_to_channels_last(x_min.to(device=xv.device), xv)
+            )
         else:
-            for i, o in enumerate(x_col_order):
-                x_transformed[:, i] = (xv[:, i] - x_min[o].to(device=xv[:, i].device)) / (
-                    x_max[o].to(device=xv[:, i].device) - x_min[o].to(device=xv[:, i].device)
-                )
+            x_transformed = (xv - self.reshape_to_channels_first(x_min.to(device=xv.device), xv)) / (
+                self.reshape_to_channels_first(x_max.to(device=xv.device), xv) - self.reshape_to_channels_first(x_min.to(device=xv.device), xv)
+            )
         return x_transformed
 
     def inverse_transform(self, x, channels_last=None):
@@ -322,17 +319,15 @@ class DMinMaxScalerTensor(DBaseScalerTensor):
         ) = self.process_x_for_transform(x, channels_last)
         x_min, x_max = self.get_scales()
         if channels_last:
-            for i, o in enumerate(x_col_order):
-                x_transformed[..., i] = (
-                    xv[..., i] * (x_max[o].to(device=xv[..., i].device) - x_min[o].to(device=xv[..., i].device)
-                                  ) + x_min[o].to(device=xv[..., i].device)
-                )
+            x_transformed = (
+                xv * (self.reshape_to_channels_last(x_max.to(device=xv.device), xv) - self.reshape_to_channels_last(x_min.to(device=xv.device), xv)
+                                ) + self.reshape_to_channels_last(x_min.to(device=xv.device), xv)
+            )
         else:
-            for i, o in enumerate(x_col_order):
-                x_transformed[:, i] = (
-                    xv[:, i] * (x_max[o].to(device=xv[:, i].device) - x_min[o].to(device=xv[:, i].device)) +
-                    x_min[o].to(device=xv[:, i].device)
-                )
+            x_transformed = (
+                xv * (self.reshape_to_channels_first(x_max.to(device=xv.device), xv) - self.reshape_to_channels_first(x_min.to(device=xv.device), xv)) +
+                self.reshape_to_channels_first(x_min.to(device=xv.device), xv)
+            )
         return x_transformed
 
     def get_scales(self):
