@@ -1,4 +1,5 @@
 from importlib.metadata import version, PackageNotFoundError
+from typing import Union
 
 from packaging.version import Version
 
@@ -6,7 +7,7 @@ from packaging.version import Version
 # 1. PyTorch Checks
 REQUIRED_TORCH_VERSION = Version("2.0.0")
 
-def get_torch_status() -> tuple[bool, Version | None]:
+def get_torch_status() -> tuple[bool, Union[Version, None]]:
     try:
         return True, Version(version("torch"))
     except PackageNotFoundError:
